@@ -8,6 +8,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
 use App\Http\Controllers\API\BaseController;
+use App\Notifications\SignupActivate;
 
 class AuthController extends BaseController
 {
@@ -29,11 +30,15 @@ class AuthController extends BaseController
            'name' => $input['name'],
            'email' => $input['email'],
            'password' => bcrypt($input['password']), 
+           'activation_token' => str_random(60),
         ]);
-        $success['token'] = $user->createToken('MyApp')->accessToken;
-        $success['name'] = $user->name;
 
-        return $this->sendResponse($success, 'User registered successfully.');
+        $user->notify(new SignupActivate($user));
+
+        $tokenResult = $user->createToken('Personal Access Token');
+        $token = $tokenResult->token;
+
+        return $this->sendResponse($tokenResult->accessToken, 'User registered successfully.');
     }
 
     public function login(Request $request)
@@ -51,6 +56,8 @@ class AuthController extends BaseController
         }
 
         $credentials = request(['email', 'password']);
+        $credentials['active'] = 1;
+        $credentials['deleted_at'] = null;
 
         if (!Auth::attempt($credentials)) {
             return $this->sendError('Unauthorized');
@@ -75,5 +82,21 @@ class AuthController extends BaseController
             )->toDateTimeString()
         ]);
 
+    }
+
+    public function signupActivate($token)
+    {
+        $user = User::where('activation_token', $token)->first();
+        if ($user) {
+            $user->active = true;
+            $user->activation_token = '';
+            $user->save();
+        } else {
+            return response()->json([
+                'message' => 'This activation token is invalid.'
+            ], 404);
+        }
+        
+        return $user;
     }
 }
