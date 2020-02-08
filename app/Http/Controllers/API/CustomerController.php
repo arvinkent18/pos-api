@@ -5,9 +5,11 @@ namespace App\Http\Controllers\API;
 use App\Customer;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
-use App\Http\Controllers\Controller;
+use Illuminate\Support\Facades\Validator;
+use App\Http\Controllers\API\BaseController;
+use App\Http\Resources\Customer as CustomerResource;
 
-class CustomerController extends Controller
+class CustomerController extends BaseController
 {
     /**
      * Display a listing of the resource.
@@ -18,10 +20,11 @@ class CustomerController extends Controller
     {
         $customers = Customer::all();
 
-        return response()->json([
-            'error' => false,
-            'customers' => $customers,
-        ], 200) ;
+        #return response()->json([
+        #    'error' => false,
+        #    'customers' => $customers,
+        #], 200) ;
+        return $this->sendResponse(CustomerResource::collection($customers), 'Customers retrieved successfully.');
     }
 
     /**
@@ -32,12 +35,26 @@ class CustomerController extends Controller
      */
     public function store(Request $request)
     {
-        $customer = Customer::create($request->all());
+        $input = $request->all();
 
-        return response()->json([
-            'error' => false,
-            'customer' => $customer,
-        ], 201);
+        $validator = Validator::make($input, [
+            'first_name' => 'required',
+            'last_name' => 'required',
+            'email' => 'required|email',
+            'address' => 'required',
+        ]);
+
+        if ($validator->fails()) {
+            return $this->sendError('Validation Error.', $validator->errors());
+        }
+
+        $customer = Customer::create($input);
+
+        #return response()->json([
+        #    'error' => false,
+        #    'customer' => $customer,
+        #], 201);
+        return $this->sendResponse(new CustomerResource($customer), 'Customer created successfully.');
     }
 
     /**
@@ -51,11 +68,15 @@ class CustomerController extends Controller
         $customer = Customer::with('orders')
                         ->with('orders.details')
                         ->find($id);
+        if (is_null($customer)) {
+            return $this->sendError('Customer not found.');
+        }
         
-        return response()->json([
-            'error' => false,
-            'customer' => $customer,
-        ], 200);
+        #return response()->json([
+        #    'error' => false,
+        #    'customer' => $customer,
+        #], 200);
+        return $this->sendResponse(new CustomerResource($customer), 'Customer retrieved successfully.');
     }
 
     /**
@@ -65,16 +86,28 @@ class CustomerController extends Controller
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
-    public function update(Request $request, $id)
+    public function update(Request $request, Customer $customer)
     {
-        $customer = Customer::find($id);
+        $input = $request->all();
 
-        $customer->update($request->all());
+        $validator = Validator::make($input, [
+            'first_name' => 'required',
+            'last_name' => 'required',
+            'email' => 'required|email',
+            'address' => 'required',
+        ]);
 
-        return response()->json([
-            'error' => false,
-            'customer' => $customer,
-        ], 200);
+        if ($validator->fails()){
+            return $this->sendError('Validation Error.', $validator->errors());       
+        }
+
+        $customer->update($input);
+
+        #return response()->json([
+        #    'error' => false,
+        #    'customer' => $customer,
+        #], 200);
+        return $this->sendResponse(new CustomerResource($customer), 'Customer updated successfully');
     }
 
     /**
@@ -83,15 +116,15 @@ class CustomerController extends Controller
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
-    public function destroy($id)
+    public function destroy(Customer $customer)
     {
-        $customer = Customer::find($id);
         $customer->delete();
 
-        return response()->json([
-            'error' => false,
-            'message' => 'The customer with the id {$customer->id} has been deleted.',
-        ]);
+        #return response()->json([
+        #    'error' => false,
+        #    'message' => 'The customer with the id {$customer->id} has been deleted.',
+        #]);
+        return $this->sendResponse([], 'Product deleted successfully');
     }
 
     public function order(Request $request, $id)
